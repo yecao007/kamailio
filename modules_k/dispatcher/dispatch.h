@@ -116,6 +116,10 @@ int ds_is_from_list(struct sip_msg *_m, int group);
  */
 void ds_check_timer(unsigned int ticks, void* param);
 
+/*! \brief
+ * Function for checking, ig the reply-code is valid.
+ */
+int check_options_rplcode(int code);
 
 /*! \brief
  * Timer for checking active calls load

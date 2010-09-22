@@ -568,6 +568,28 @@ modparam("dispatcher", "force_dst", 1)
 	</section>
 
  	<section>
+ 		<title><varname>ds_options_reply_codes</varname> (string)</title>
+ 		<para>
+		This parameters allows the configuration of valid return codes to the OPTIONS-Request.
+		The "200 OK" is always accepted, if you want to accept other return codes you may specify
+		them in this parameter as a comma separated value:
+ 		</para>
+ 		<para>
+ 		<emphasis>
+ 			Default value is <quote>null</quote> - only accept "200 OK" as a reply.
+ 		</emphasis>
+ 		</para>
+ 		<example>
+ 		<title>Set the <quote>ds_options_reply_codes</quote> parameter</title>
+ <programlisting format="linespecific">
+ ...
+ modparam("dispatcher", "ds_options_reply_codes", "403,500,604")
+ ...
+ </programlisting>
+ 		</example>
+	</section>	
+	
+ 	<section>
  		<title><varname>ds_append_branch</varname> (int)</title>
  		<para>
 		If set to 1, functions will automaticall append a new branch if

@@ -2259,12 +2259,8 @@ static void ds_options_callback( struct cell *t, int type,
 			ps->code, uri.len, uri.s, group);
 	/* ps->code contains the result-code of the request.
 	 *
-	 * We accept both a "200 OK", "501 Not supported" and "403" as an
-	 * successful reply.
-	 *   501: Cisco-Gateways reply with a "501 Not supported" to the request.
-	 *   403: Aastra-Gateways reply with a "403" to the request.
-	 *   405: Some GWs reply with a "405 Method Not Allowed" to the request. */
-	if ((ps->code == 200) || (ps->code == 501) || (ps->code == 403) || (ps->code == 405))
+	 * We accept "200 OK" and custom reply codes as a valid response. */
+	 if ((ps->code == 200) || check_options_rplcode(ps->code))
 	{
 		/* Set the according entry back to "Active":
 		 *  remove the Probing/Inactive Flag and reset the failure counter. */

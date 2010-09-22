@@ -127,6 +127,10 @@ str ds_table_name        = str_init(DS_TABLE_NAME);
 str ds_setid_pvname   = {NULL, 0};
 pv_spec_t ds_setid_pv;
 
+static str options_reply_codes_str= {NULL, 0};
+static int* options_reply_codes = NULL;
+static int options_codes_no;
+
 /** module functions */
 static int mod_init(void);
 static int child_init(int);
@@ -151,6 +155,8 @@ static struct mi_root* ds_mi_set(struct mi_root* cmd, void* param);
 static struct mi_root* ds_mi_list(struct mi_root* cmd, void* param);
 static struct mi_root* ds_mi_reload(struct mi_root* cmd_tree, void* param);
 static int mi_child_init(void);
+
+static int parse_reply_codes();
 
 static cmd_export_t cmds[]={
 	{"ds_select_dst",    (cmd_function)w_ds_select_dst,    2,
@@ -206,6 +212,7 @@ static param_export_t params[]={
 	{"ds_hash_expire",     INT_PARAM, &ds_hash_expire},
 	{"ds_hash_initexpire", INT_PARAM, &ds_hash_initexpire},
 	{"ds_hash_check_interval", INT_PARAM, &ds_hash_check_interval},
+	{"ds_options_reply_codes", STR_PARAM, &options_reply_codes_str.s},
 	{0,0,0}
 };
 
@@ -264,6 +271,16 @@ static int mod_init(void)
 	if (ds_ping_from.s) ds_ping_from.len = strlen(ds_ping_from.s);
 	if (ds_ping_method.s) ds_ping_method.len = strlen(ds_ping_method.s);
 
+	if(options_reply_codes_str.s) {
+		options_reply_codes_str.len = strlen(options_reply_codes_str.s);
+		if(parse_reply_codes()< 0)
+		{
+			LM_ERR("Bad format for options_reply_code parameter"
+				" - Need a code list separated by commas\n");
+			return -1;
+		}
+	}	
+	
 	if(init_data()!= 0)
 		return -1;
 
@@ -475,6 +492,9 @@ static void destroy(void)
 	if(ds_db_url.s)
 		ds_disconnect_db();
 	ds_hash_load_destroy();
+	
+	if(options_reply_codes)
+		pkg_free(options_reply_codes);	
 }
 
 /**
@@ -708,4 +728,108 @@ static int w_ds_is_from_list0(struct sip_msg *msg, char *str1, char *str2)
 static int w_ds_is_from_list1(struct sip_msg *msg, char *set, char *str2)
 {
 	return ds_is_from_list(msg, (int)(long)set);
+}
+
+static int parse_reply_codes(void)
+{
+	str code_str;
+	unsigned int code;
+	int index= 0;
+	char* sep1, *sep2, *aux;
+
+	options_reply_codes = (int*)pkg_malloc(
+			options_reply_codes_str.len/3 * sizeof(int));
+
+	if(options_reply_codes== NULL)
+	{
+		LM_ERR("no more memory\n");
+		return -1;
+	}
+    
+	sep1 = options_reply_codes_str.s;
+	sep2 = strchr(options_reply_codes_str.s, ',');
+
+	while(sep2 != NULL)
+	{
+		// Trim the values:
+		aux = sep2;
+		while(*sep1 == ' ')
+			sep1++;
+		
+		sep2--;
+		while(*sep2 == ' ')
+			sep2--;
+
+		// The resulting string
+		code_str.s = sep1;
+		code_str.len = sep2-sep1+1;
+
+		// Create a Integer from the String:
+		if(str2int(&code_str, &code)< 0)
+		{
+			LM_ERR("Bad format - not am integer [%.*s]\n", 
+					code_str.len, code_str.s);
+			return -1;
+		}
+		
+		// Check if it is valid:
+		if(code<100 ||code > 700)
+		{
+			LM_ERR("Wrong number [%d]- must be a valid SIP reply code\n", code);
+			return -1;
+		}
+		
+		// Add it to the List
+		options_reply_codes[index] = code;
+		index++;
+		
+		// Next item:
+		sep1 = aux +1;
+		sep2 = strchr(sep1, ',');
+	}
+	
+	// No more commas? Last value:
+	// Trim:
+	while(*sep1 == ' ')
+		sep1++;
+	sep2 = options_reply_codes_str.s+options_reply_codes_str.len -1;
+	while(*sep2 == ' ')
+		sep2--;
+
+	// Convert
+	code_str.s = sep1;
+	code_str.len = sep2 -sep1 +1;
+	if(str2int(&code_str, &code)< 0)
+	{
+		LM_ERR("Bad format - not am integer [%.*s]\n",
+				code_str.len, code_str.s);
+		return -1;
+	}
+	// Validate:
+	if(code<100 ||code > 700)
+	{
+		LM_ERR("Wrong number [%d]- must be a valid SIP reply code\n", code);
+		return -1;
+	}
+	// Add:
+	options_reply_codes[index] = code;
+	index++;
+	
+	// Done:
+	options_codes_no = index;
+
+	return 0;
+}
+
+int check_options_rplcode(int code)
+{
+	int i;
+	
+	for (i =0; i< options_codes_no; i++)
+	{
+		if(options_reply_codes[i] == code)
+			return 1;
+	}
+
+	return 0;
 }
