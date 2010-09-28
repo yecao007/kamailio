@@ -65,6 +65,7 @@
 
 #include "ds_ht.h"
 #include "dispatch.h"
+#include "config.h"
 
 MODULE_VERSION
 
@@ -129,7 +130,7 @@ pv_spec_t ds_setid_pv;
 
 static str options_reply_codes_str= {NULL, 0};
 static int* options_reply_codes = NULL;
-static int options_codes_no;
+static int* options_codes_no;
 
 /** module functions */
 static int mod_init(void);
@@ -271,8 +272,14 @@ static int mod_init(void)
 	if (ds_ping_from.s) ds_ping_from.len = strlen(ds_ping_from.s);
 	if (ds_ping_method.s) ds_ping_method.len = strlen(ds_ping_method.s);
 
+        if(cfg_declare("dispatcher", dispatcher_cfg_def, &default_dispatcher_cfg, cfg_sizeof(dispatcher), &dispatcher_cfg)){
+                LM_ERR("Fail to declare the configuration\n");
+                return -1;
+        }
+
 	if(options_reply_codes_str.s) {
 		options_reply_codes_str.len = strlen(options_reply_codes_str.s);
+		cfg_get(dispatcher, dispatcher_cfg, options_reply_codes_str) = options_reply_codes_str;
 		if(parse_reply_codes()< 0)
 		{
 			LM_ERR("Bad format for options_reply_code parameter"
@@ -460,6 +467,8 @@ static int mod_init(void)
 		 *****************************************************/
 		register_timer(ds_check_timer, NULL, ds_ping_interval);
 	}
+	/* Copy Threshhold to Config */
+	cfg_get(dispatcher, dispatcher_cfg, probing_threshhold) = probing_threshhold;
 
 	return 0;
 }
@@ -494,7 +503,7 @@ static void destroy(void)
 	ds_hash_load_destroy();
 	
 	if(options_reply_codes)
-		pkg_free(options_reply_codes);	
+		shm_free(options_reply_codes);	
 }
 
 /**
@@ -734,20 +743,25 @@ static int parse_reply_codes(void)
 {
 	str code_str;
 	unsigned int code;
-	int index= 0;
+	int i,index= 0;
 	char* sep1, *sep2, *aux;
+	int* options_reply_codes_new = NULL;
+	int* options_reply_codes_old = NULL;
 
-	options_reply_codes = (int*)pkg_malloc(
-			options_reply_codes_str.len/3 * sizeof(int));
+	if(!options_codes_no)
+		options_codes_no = (int*)shm_malloc(sizeof(int));
 
-	if(options_reply_codes== NULL)
+	options_reply_codes_new = (int*)shm_malloc(
+			cfg_get(dispatcher, dispatcher_cfg, options_reply_codes_str).len/3 * sizeof(int));
+
+	if(options_reply_codes_new== NULL)
 	{
 		LM_ERR("no more memory\n");
 		return -1;
 	}
-    
-	sep1 = options_reply_codes_str.s;
-	sep2 = strchr(options_reply_codes_str.s, ',');
+ 
+	sep1 = cfg_get(dispatcher, dispatcher_cfg, options_reply_codes_str).s;
+	sep2 = strchr(cfg_get(dispatcher, dispatcher_cfg, options_reply_codes_str).s, ',');
 
 	while(sep2 != NULL)
 	{
@@ -780,7 +794,7 @@ static int parse_reply_codes(void)
 		}
 		
 		// Add it to the List
-		options_reply_codes[index] = code;
+		options_reply_codes_new[index] = code;
 		index++;
 		
 		// Next item:
@@ -792,7 +806,8 @@ static int parse_reply_codes(void)
 	// Trim:
 	while(*sep1 == ' ')
 		sep1++;
-	sep2 = options_reply_codes_str.s+options_reply_codes_str.len -1;
+	sep2 = cfg_get(dispatcher, dispatcher_cfg, options_reply_codes_str).s
+		+cfg_get(dispatcher, dispatcher_cfg, options_reply_codes_str).len -1;
 	while(*sep2 == ' ')
 		sep2--;
 
@@ -812,11 +827,34 @@ static int parse_reply_codes(void)
 		return -1;
 	}
 	// Add:
-	options_reply_codes[index] = code;
+	options_reply_codes_new[index] = code;
 	index++;
-	
-	// Done:
-	options_codes_no = index;
+
+	/* More reply-codes? Change Pointer and then set number of codes. */
+	if (index > *options_codes_no) {
+		// Copy Pointer
+		options_reply_codes_old = options_reply_codes;
+		options_reply_codes = options_reply_codes_new;
+		// Done: Set new Number of entries:
+		*options_codes_no = index;
+		// Free the old memory area:
+		if(options_reply_codes_old)
+			shm_free(options_reply_codes_old);	
+	/* Less or equal? Set the number of codes first. */
+	} else {
+		// Done:
+		*options_codes_no = index;
+		// Copy Pointer
+		options_reply_codes_old = options_reply_codes;
+		options_reply_codes = options_reply_codes_new;
+		// Free the old memory area:
+		if(options_reply_codes_old)
+			shm_free(options_reply_codes_old);	
+	}
+	for (i =0; i< *options_codes_no; i++)
+	{
+		LM_INFO("Dispatcher: Now accepting Reply-Code %d (%d/%d) as valid\n", options_reply_codes[i],(i+1),*options_codes_no);
+	}
 
 	return 0;
 }
@@ -825,11 +863,15 @@ int check_options_rplcode(int code)
 {
 	int i;
 	
-	for (i =0; i< options_codes_no; i++)
+	for (i =0; i< *options_codes_no; i++)
 	{
 		if(options_reply_codes[i] == code)
 			return 1;
 	}
 
 	return 0;
+}
+
+void reply_codes_update(str* gname, str* name){
+	parse_reply_codes();
 }

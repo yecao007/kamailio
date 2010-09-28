@@ -72,6 +72,7 @@
 
 #include "ds_ht.h"
 #include "dispatch.h"
+#include "config.h"
 
 #define DS_TABLE_VERSION	1
 #define DS_TABLE_VERSION2	2
@@ -229,7 +230,7 @@ int ds_set_attrs(ds_dest_t *dest, str *attrs)
 	param_t *pit=NULL;
 	str param;
 
-	if(attrs==NULL || attrs->len<=0)
+	if(attrs==NULL || attrs->s==NULL || attrs->len<=0)
 		return 0;
 	if(attrs->s[attrs->len-1]==';')
 		attrs->len--;
@@ -554,6 +555,7 @@ int ds_load_list(char *lfile)
 		/* get flags */
 		flags = 0;
 		priority = 0;
+		attrs.s = 0; attrs.len = 0;
 		if(*p=='\0' || *p=='#')
 			goto add_destination; /* no flags given */
 
@@ -568,7 +570,6 @@ int ds_load_list(char *lfile)
 			p++;
 
 		/* get priority */
-		priority = 0;
 		if(*p=='\0' || *p=='#')
 			goto add_destination; /* no priority given */
 
@@ -581,7 +582,6 @@ int ds_load_list(char *lfile)
 		/* eat all white spaces */
 		while(*p && (*p==' ' || *p=='\t' || *p=='\r' || *p=='\n'))
 			p++;
-		attrs.s = 0; attrs.len = 0;
 		if(*p=='\0' || *p=='#')
 			goto add_destination; /* no priority given */
 
@@ -2057,11 +2057,13 @@ int ds_set_state(int group, str *address, int state, int type)
 					idx->dlist[i].failure_count++;
 					/* Fire only, if the Threshold is reached. */
 					if (idx->dlist[i].failure_count
-							< probing_threshhold) return 0;
+							< cfg_get(dispatcher, dispatcher_cfg, probing_threshhold))
+						return 0;
 					if (idx->dlist[i].failure_count
-							> probing_threshhold)
+							> cfg_get(dispatcher, dispatcher_cfg, probing_threshhold))
 						idx->dlist[i].failure_count
-							= probing_threshhold;				
+							= cfg_get(dispatcher, dispatcher_cfg,
+								probing_threshhold);				
 				}
 			}
 			/* Reset the Failure-Counter */
@@ -2112,7 +2114,7 @@ int ds_print_list(FILE *fout)
   				if (list->dlist[j].failure_count > 0) {
   					fprintf(fout, " (Fail %d/%d)",
   							list->dlist[j].failure_count,
- 							probing_threshhold);
+ 							cfg_get(dispatcher, dispatcher_cfg, probing_threshhold));
   				} else {
   					fprintf(fout, "           ");
   				}

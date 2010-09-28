@@ -528,6 +528,7 @@ modparam("dispatcher", "force_dst", 1)
  		<para>
 		If you want to set a gateway into probing mode, you will need a specific number of requests until it will change from "active" to probing.
 		The number of attempts can be set with this parameter.
+		This parameter can be modified via ser config framework.
  		</para>
  		<para>
  		<emphasis>
@@ -572,7 +573,8 @@ modparam("dispatcher", "force_dst", 1)
  		<para>
 		This parameters allows the configuration of valid return codes to the OPTIONS-Request.
 		The "200 OK" is always accepted, if you want to accept other return codes you may specify
-		them in this parameter as a comma separated value:
+		them in this parameter as a comma separated value.
+		This parameter can be modified via ser config framework.
  		</para>
  		<para>
  		<emphasis>
